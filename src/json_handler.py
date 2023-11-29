@@ -51,3 +51,6 @@ class HandlerJson:
             return None
         else:
             return list_runs[qtde - 1]
+
+    def get_min_discount_pct(self) -> float:
+        return self._file_json.get('min_discount_pct', 0.0)
