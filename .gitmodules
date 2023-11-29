@@ -1,0 +1,4 @@
+[submodule "gmail_python"]
+	path = gmail_python
+	url = https://github.com/feealc/gmail-python.git
+	branch = main

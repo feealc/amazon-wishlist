@@ -1,3 +1,5 @@
+import sys
+sys.path.append('../')
 import selenium.webdriver.chrome.webdriver
 from selenium import webdriver
 from selenium import common
@@ -8,11 +10,12 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from json_handler import HandlerJson
 from define import *
+from gmail_python.src.main import GmailHandler
+from token_gmail import TOKEN_GMAIL
 import argparse
 import datetime
 import pickle
 import time
-import sys
 
 
 def print_color(color: BColores, msg: str, bold: bool = False, underline: bool = False) -> None:
@@ -35,6 +38,14 @@ def print_warning(msg: str, bold: bool = False, underline: bool = False) -> None
 
 def print_fail(msg: str, bold: bool = False, underline: bool = False) -> None:
     print_color(BColores.RED, msg=msg, bold=bold, underline=underline)
+
+
+def format_price(value: float) -> str:
+    return f'R$ {value:,.2f}'.replace('.', ',')
+
+
+def format_html_space(value: str) -> str:
+    return value.replace(' ', '&nbsp;')
 
 
 def get_timestamp() -> str:
@@ -141,6 +152,7 @@ if __name__ == '__main__':
 
     # get last run info
     last_run_info = j.get_last_run()
+    games_with_discount = []
     if last_run_info is not None:
         # print(last_run_info)
         # compare prices
@@ -157,17 +169,50 @@ if __name__ == '__main__':
             if current_price < old_price:  # preco baixou
                 price_diff = round(old_price - current_price, 2)
                 price_diff_pct = 100.0 - ((current_price / old_price) * 100)
-                price_diff_pct = f'{price_diff_pct:,.2f}%'.replace('.', ',')
-                print(f'\n### game [{name}]\npreco old [{old_price}] preco novo [{current_price}] diff [{price_diff}] [{price_diff_pct}]')
+                price_diff_pct_fmt = f'{price_diff_pct:,.2f}%'.replace('.', ',')
+                print(f'\n### game [{name}]\npreco old [{old_price}] preco novo [{current_price}] diff [{price_diff}] [{price_diff_pct_fmt}]')
                 print_ok('preço baixou!!!')
+                games_with_discount.append({
+                    'name': name,
+                    'old_price': old_price,
+                    'new_price': current_price,
+                    'diff_price': price_diff,
+                    # 'diff_price_fmt': f'R$ {price_diff:,.2f}'.replace('.', ','),
+                    'diff_price_fmt': format_price(price_diff),
+                    'pct_diff_price': round(price_diff_pct, 2),
+                    'pct_diff_price_fmt': price_diff_pct_fmt,
+                    # 'status_price': 'down',
+                })
             elif current_price > old_price:  # preco aumentou
                 price_diff = round(current_price - old_price, 2)
                 price_diff_pct = 100.0 - ((old_price / current_price) * 100)
-                price_diff_pct = f'{price_diff_pct:,.2f}%'.replace('.', ',')
-                print(f'\n### game [{name}]\npreco old [{old_price}] preco novo [{current_price}] diff [{price_diff}] [{price_diff_pct}]')
+                price_diff_pct_fmt = f'{price_diff_pct:,.2f}%'.replace('.', ',')
+                print(f'\n### game [{name}]\npreco old [{old_price}] preco novo [{current_price}] diff [{price_diff}] [{price_diff_pct_fmt}]')
                 print_fail('preço aumentou...')
             # else:
             #     pass
+
+    print('\n\n')
+    body_email = ''
+    if len(games_with_discount) > 0:
+        games_with_discount = sorted(games_with_discount, key=lambda k: k['diff_price'], reverse=True)
+        for g in games_with_discount:
+            # print(g)
+            if g.get('pct_diff_price', 0.0) > j.get_min_discount_pct():
+                body_email += f'<span style="color: red;"><b>{g.get("name")}</b></span>' + '<br>'
+                body_email += f'Preço antigo: {format_price(g.get("old_price", 0.0))}' + '<br>'
+                body_email += f'Preço novo  : {format_price(g.get("new_price", 0.0))}' + '<br>'
+                body_email += f'Diferença: {g.get("diff_price_fmt")} - {g.get("pct_diff_price_fmt")}' + '<br>'
+                body_email += '<br>'
+    body_email += '<br>' + '<b>Gerado em:</b>' + '<br>' + datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    body_email = format_html_space(body_email)
+
+    gmail = GmailHandler(email_owner='fernandobalcantara@gmail.com', password=TOKEN_GMAIL, flag_send=False)
+    now = datetime.datetime.now()
+    gmail.set_subject(f'teste email desconto amazon lista jogos - {now.strftime("%Y-%m-%d")}')
+    gmail.set_to(same_as_owner=True)
+    gmail.set_body(body_email)
+    gmail.send(debug=False)
 
     # write to json file
     # j.write_run(timestamp=get_timestamp(), total=len(all_games), infos=all_games_dict)
