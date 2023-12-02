@@ -8,7 +8,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from json_handler import HandlerJson
+from json_handler import HandlerJsonProject, HandlerJsonRuns
 from define import *
 from gmail_python.src.main import GmailHandler
 from token_gmail import TOKEN_GMAIL
@@ -117,6 +117,7 @@ def handle_html_page() -> tuple:
             all_games_dict.append(dict_game)
             # print(dict_game)
 
+    driver.close()
     return all_games, all_games_dict
 
 
@@ -131,38 +132,48 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-e', '--exit', action='store_true', help='Exit')
     parser.add_argument('-r', '--reset', action='store_true', help='Reset arquivo JSON')
+    parser.add_argument('-s', '--send', action='store_true', help='Do not send e-mail')
     args = parser.parse_args()
 
-    print('main')
-
-    j = HandlerJson()
+    proj = HandlerJsonProject()
+    # proj.dump_json()
+    run = HandlerJsonRuns()
     if args.reset:
         print('reset json file...')
-        j.reset_json()
-    j.dump_json()
+        run.reset_runs()
+    # run.dump_json()
 
     if args.exit:
         sys.exit()
 
     all_games, all_games_dict = handle_html_page()
-    # with open("all_games_dict.pickle", "wb") as f:
+
+    # today = datetime.datetime.now() - datetime.timedelta(days=1)
+    # today = today.strftime('%Y%m%d')
+    # file_name_pickle = f'all_games_dict.pickle'
+    # file_name_pickle = f'all_games_dict_{today}.pickle'
+    # write
+    # with open(file_name_pickle, 'wb') as f:
     #     pickle.dump(all_games_dict, f)
-    # with open("all_games_dict.pickle", "rb") as f:
+    # load
+    # with open(file_name_pickle, 'rb') as f:
     #     all_games_dict = pickle.load(f)
 
     # get last run info
-    last_run_info = j.get_last_run()
+    last_run_info = run.get_last_run()
     games_with_discount = []
     if last_run_info is not None:
-        # print(last_run_info)
         # compare prices
-        for old_game in last_run_info['games']:
+        for current_game in all_games_dict:
             # print(f'\n\n=========================================================================')
+            # print(current_game)
+            old_game = find_game_info(current_game['id'], last_run_info['games'])
             # print(old_game)
-            current_game = find_game_info(old_game['id'], all_games_dict)
-            if current_game is None:  # game não existe mais na lista
+            if old_game is None:  # game não existe mais na lista
                 continue
-            name = old_game['name']
+            if current_game.get('in_stock', False) is False:
+                continue
+            name = current_game['name']
             old_price = old_game['price']
             current_price = current_game['price']
             # print(f'game [{name}] preco old [{old_price}] preco novo [{current_price}]')
@@ -170,14 +181,17 @@ if __name__ == '__main__':
                 price_diff = round(old_price - current_price, 2)
                 price_diff_pct = 100.0 - ((current_price / old_price) * 100)
                 price_diff_pct_fmt = f'{price_diff_pct:,.2f}%'.replace('.', ',')
-                print(f'\n### game [{name}]\npreco old [{old_price}] preco novo [{current_price}] diff [{price_diff}] [{price_diff_pct_fmt}]')
+                print(f'\n### game [{name}] '
+                      f'preco old [{old_price}] '
+                      f'preco novo [{current_price}] '
+                      f'diff [{price_diff}] [{price_diff_pct_fmt}]'
+                      )
                 print_ok('preço baixou!!!')
                 games_with_discount.append({
                     'name': name,
                     'old_price': old_price,
                     'new_price': current_price,
                     'diff_price': price_diff,
-                    # 'diff_price_fmt': f'R$ {price_diff:,.2f}'.replace('.', ','),
                     'diff_price_fmt': format_price(price_diff),
                     'pct_diff_price': round(price_diff_pct, 2),
                     'pct_diff_price_fmt': price_diff_pct_fmt,
@@ -187,18 +201,22 @@ if __name__ == '__main__':
                 price_diff = round(current_price - old_price, 2)
                 price_diff_pct = 100.0 - ((old_price / current_price) * 100)
                 price_diff_pct_fmt = f'{price_diff_pct:,.2f}%'.replace('.', ',')
-                print(f'\n### game [{name}]\npreco old [{old_price}] preco novo [{current_price}] diff [{price_diff}] [{price_diff_pct_fmt}]')
-                print_fail('preço aumentou...')
+                # print(f'\n### game [{name}] '
+                #       f'preco old [{old_price}] '
+                #       f'preco novo [{current_price}] '
+                #       f'diff [{price_diff}] [{price_diff_pct_fmt}]'
+                #       )
+                # print_fail('preço aumentou...')
             # else:
             #     pass
 
-    print('\n\n')
+    # print('\n\n')
     body_email = ''
     if len(games_with_discount) > 0:
         games_with_discount = sorted(games_with_discount, key=lambda k: k['diff_price'], reverse=True)
         for g in games_with_discount:
             # print(g)
-            if g.get('pct_diff_price', 0.0) > j.get_min_discount_pct():
+            if g.get('pct_diff_price', 0.0) > proj.get_min_discount_pct():
                 body_email += f'<span style="color: red;"><b>{g.get("name")}</b></span>' + '<br>'
                 body_email += f'Preço antigo: {format_price(g.get("old_price", 0.0))}' + '<br>'
                 body_email += f'Preço novo  : {format_price(g.get("new_price", 0.0))}' + '<br>'
@@ -207,7 +225,7 @@ if __name__ == '__main__':
     body_email += '<br>' + '<b>Gerado em:</b>' + '<br>' + datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     body_email = format_html_space(body_email)
 
-    gmail = GmailHandler(email_owner='fernandobalcantara@gmail.com', password=TOKEN_GMAIL, flag_send=False)
+    gmail = GmailHandler(email_owner='fernandobalcantara@gmail.com', password=TOKEN_GMAIL, flag_send=args.send)
     now = datetime.datetime.now()
     gmail.set_subject(f'teste email desconto amazon lista jogos - {now.strftime("%Y-%m-%d")}')
     gmail.set_to(same_as_owner=True)
@@ -215,9 +233,8 @@ if __name__ == '__main__':
     gmail.send(debug=False)
 
     # write to json file
-    # j.write_run(timestamp=get_timestamp(), total=len(all_games), infos=all_games_dict)
+    run.write_run(timestamp=get_timestamp(), total=len(all_games), infos=all_games_dict)
 
     # while True:
     #     pass
     # time.sleep(3)
-    # driver.close()
