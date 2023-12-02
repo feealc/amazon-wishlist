@@ -162,3 +162,4 @@ cython_debug/
 # General
 src/token_gmail.py
 *.pickle
+*_test.json
