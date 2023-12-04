@@ -1,11 +1,9 @@
 import sys
 sys.path.append('../')
-import selenium.webdriver.chrome.webdriver
 from selenium import webdriver
 from selenium import common
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from json_handler import HandlerJsonProject, HandlerJsonRuns
@@ -14,7 +12,7 @@ from gmail_python.src.main import GmailHandler
 from token_gmail import TOKEN_GMAIL
 import argparse
 import datetime
-import pickle
+# import pickle
 import time
 
 
@@ -59,16 +57,16 @@ def get_price(price_label: str, attr_data_price: str) -> tuple:
     else:
         try:
             price = float(attr_data_price)
-        except:
+        except ValueError:
             price = 0.0
         price_fmt = f'{currency_symbol} {price:,.2f}'.replace('.', ',')
         return price, price_fmt, False
 
 
-def find_game_info(id: str, games: list) -> dict:
+def find_game_info(game_id: str, games: list) -> dict:
     for game in games:
         if 'id' in game:
-            if id.lower() == game['id'].lower():
+            if game_id.lower() == game['id'].lower():
                 return game
 
 
@@ -128,7 +126,7 @@ def driver_end_page(driver) -> None:
         time.sleep(2)
 
 
-if __name__ == '__main__':
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('-e', '--exit', action='store_true', help='Exit')
     parser.add_argument('-r', '--reset', action='store_true', help='Reset arquivo JSON')
@@ -198,9 +196,10 @@ if __name__ == '__main__':
                     # 'status_price': 'down',
                 })
             elif current_price > old_price:  # preco aumentou
-                price_diff = round(current_price - old_price, 2)
-                price_diff_pct = 100.0 - ((old_price / current_price) * 100)
-                price_diff_pct_fmt = f'{price_diff_pct:,.2f}%'.replace('.', ',')
+                pass
+                # price_diff = round(current_price - old_price, 2)
+                # price_diff_pct = 100.0 - ((old_price / current_price) * 100)
+                # price_diff_pct_fmt = f'{price_diff_pct:,.2f}%'.replace('.', ',')
                 # print(f'\n### game [{name}] '
                 #       f'preco old [{old_price}] '
                 #       f'preco novo [{current_price}] '
@@ -238,3 +237,7 @@ if __name__ == '__main__':
     # while True:
     #     pass
     # time.sleep(3)
+
+
+if __name__ == '__main__':
+    main()
